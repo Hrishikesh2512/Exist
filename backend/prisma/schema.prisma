@@ -1,0 +1,407 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum SessionKind {
+  TIMETABLE
+  ADHOC
+}
+
+enum SessionState {
+  SCHEDULED // announced extra class, not started yet
+  ACTIVE
+  ENDED
+  CANCELLED
+  TEACHER_NO_SHOW
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  LEFT_EARLY
+  FLAGGED
+  ABSENT
+  EXCUSED
+  MANUAL
+  UNVERIFIED
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  role         Role
+  name         String
+  email        String   @unique
+  passwordHash String
+  rollNo        String?  @unique
+  calendarToken String?  @unique // for the subscribable .ics feed
+  mustChangePassword  Boolean   @default(false)
+  sessionVersion      Int       @default(0) // bumped on password change: old logins stop working
+  disabledAt          DateTime? // removed by an admin: cannot sign in
+  resetCodeHash       String? // forgot-password code (hashed), valid until resetExpires
+  resetExpires        DateTime?
+  resetAttempts       Int       @default(0)
+  joinedWith          String? // join code used to create the account, if any
+  consentVersion      Int? // privacy notice version the user accepted
+  consentAt           DateTime?
+  deletionRequestedAt DateTime?
+  createdAt     DateTime @default(now())
+
+  devices     Device[]
+  enrollments Enrollment[]
+  teaching    SectionTeacher[]
+  classes     ClassMember[]
+}
+
+model Device {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  platform        String // android | ios
+  publicKeySpki   String // base64 DER, P-256
+  attestationType String // android-key | app-attest | dev
+  attestationOk     Boolean? // null = not checked (dev mode / iOS)
+  attestationDetail String?
+  model           String? // e.g. "samsung SM-A546E"
+  osVersion       String?
+  installId       String? // ANDROID_ID / identifierForVendor: a hint only, never trusted
+  boundAt         DateTime  @default(now())
+  revokedAt       DateTime?
+
+  @@index([userId])
+}
+
+model DeviceChangeRequest {
+  id            String        @id @default(uuid())
+  userId        String
+  platform      String
+  publicKeySpki String
+  attestation   String
+  attestationOk     Boolean?
+  attestationDetail String?
+  model         String?
+  osVersion     String?
+  installId     String?
+  requestedAt   DateTime      @default(now())
+  eligibleAt    DateTime
+  status        RequestStatus @default(PENDING)
+  decidedBy     String?
+  deviceId      String?
+}
+
+model Course {
+  id       String    @id @default(uuid())
+  code     String    @unique
+  name     String
+  sections Section[]
+}
+
+/// A subject taught to one group of students in one semester, e.g. "CS301 · CSE-A · Odd 2026".
+model Section {
+  id          String           @id // human readable, e.g. CS301-A
+  courseId    String? // the subject; may be set after the user import created the section
+  course      Course?          @relation(fields: [courseId], references: [id])
+  termId      String?
+  term        Term?            @relation(fields: [termId], references: [id])
+  groupName   String? // e.g. CSE-A
+  startDate   String? // YYYY-MM-DD; classes only happen between these dates (set by the teacher)
+  endDate     String?
+  archivedAt  DateTime? // teacher archived the class: kept for records, no new classes
+  createdBy   String?
+  classId     String? // students of this class are enrolled automatically
+  klass       ClassGroup?      @relation(fields: [classId], references: [id])
+  enrollments Enrollment[]
+  teachers    SectionTeacher[]
+}
+
+/// A class of students (e.g. "CSE-A"). Many classes can study the same subject;
+/// each (subject, class) pair is its own Section with its own teacher and attendance.
+model ClassGroup {
+  id       String        @id @default(uuid())
+  name     String        @unique
+  members  ClassMember[]
+  sections Section[]
+}
+
+model ClassMember {
+  classId   String
+  studentId String
+  klass     ClassGroup @relation(fields: [classId], references: [id])
+  student   User       @relation(fields: [studentId], references: [id])
+
+  @@id([classId, studentId])
+  @@index([studentId])
+}
+
+/// Who teaches a section. Any of them can take its classes at any time.
+model SectionTeacher {
+  sectionId String
+  teacherId String
+  section   Section @relation(fields: [sectionId], references: [id])
+  teacher   User    @relation(fields: [teacherId], references: [id])
+
+  @@id([sectionId, teacherId])
+  @@index([teacherId])
+}
+
+model Enrollment {
+  sectionId String
+  studentId String
+  section   Section @relation(fields: [sectionId], references: [id])
+  student   User    @relation(fields: [studentId], references: [id])
+
+  @@id([sectionId, studentId])
+  @@index([studentId])
+}
+
+model Room {
+  id            String @id
+  name          String
+  rssiThreshold Int    @default(-80)
+}
+
+model TimetableSlot {
+  id        String  @id @default(uuid())
+  sectionId String
+  teacherId String
+  roomId    String?
+  weekday   Int
+  startMin  Int
+  endMin    Int
+  validFrom String
+  validTo   String
+}
+
+enum CalendarKind {
+  HOLIDAY
+  EXAM
+  EVENT
+  DAY_ORDER
+}
+
+/// A semester.
+model Term {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  startDate String
+  endDate   String
+  sections  Section[]
+}
+
+model CalendarEvent {
+  id             String       @id @default(uuid())
+  kind           CalendarKind
+  title          String
+  fromDate       String
+  toDate         String
+  noClasses      Boolean      @default(true)
+  followsWeekday Int? // DAY_ORDER: run this weekday's timetable
+  sectionIds     String[]     @default([]) // empty = whole institution
+  createdBy      String
+  createdAt      DateTime     @default(now())
+
+  @@index([fromDate, toDate])
+}
+
+/// A teacher's choices for a section, within the limits in domain/policy.ts.
+model SectionSettings {
+  sectionId       String   @id
+  autoStart       Boolean  @default(true)
+  midChecks       Int?
+  startWindowMin  Int?
+  endWindowMin    Int?
+  lateWeight      Float?
+  leftEarlyWeight Float?
+  manualQuota     Int?
+  updatedBy       String
+  updatedAt       DateTime @updatedAt
+}
+
+/// Teacher cancels one occurrence in advance, or admin assigns a substitute.
+model OccurrenceOverride {
+  sessionKey   String   @id
+  cancelled    Boolean  @default(false)
+  reason       String?
+  substituteId String?
+  createdBy    String
+  createdAt    DateTime @default(now())
+}
+
+model Session {
+  id                 String       @id @default(uuid())
+  key                String       @unique
+  shortId            Int // stored as signed int32
+  kind               SessionKind
+  sectionIds         String[]
+  teacherId          String
+  roomId             String?
+  title              String?
+  scheduledStart     DateTime
+  scheduledEnd       DateTime
+  actualStart        DateTime?
+  actualEnd          DateTime?
+  plannedEnd         DateTime
+  secret             String? // base64; only known once the teacher phone syncs
+  activity           Json         @default("[]") // [[fromMs,toMs],...] teacher phone active
+  plan               Json         @default("{}") // teacher's plan overrides used for this class
+  extraChecks        Json         @default("[]") // [[fromMs,toMs],...] surprise checks
+  pauses             Json         @default("[]") // [[fromMs,toMs],...] attendance paused by teacher
+  state              SessionState
+  substitutePending  Boolean      @default(false)
+  cancelReason       String?
+  noticesSent        String[]     @default([])
+  finalizedAt        DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  checkins   CheckIn[]
+  attendance Attendance[]
+
+  @@index([teacherId, scheduledStart])
+}
+
+model CheckIn {
+  id           String   @id @default(uuid())
+  sessionId    String
+  session      Session  @relation(fields: [sessionId], references: [id])
+  studentId    String?
+  deviceId     String
+  nonce        String
+  slot         BigInt
+  receivedAt   DateTime
+  raw          String // base64 of the exact bytes the student signed
+  via          String   @default("gatt") // gatt | qr
+  valid        Boolean
+  rejectReason String?
+  createdAt    DateTime @default(now())
+
+  @@unique([deviceId, nonce])
+  @@index([sessionId, studentId])
+}
+
+model Attendance {
+  sessionId      String
+  studentId      String
+  session        Session          @relation(fields: [sessionId], references: [id])
+  computed       AttendanceStatus
+  reasons        String[]
+  override       AttendanceStatus?
+  overrideBy     String?
+  overrideReason String?
+  updatedAt      DateTime         @updatedAt
+
+  @@id([sessionId, studentId])
+  @@index([studentId])
+}
+
+model ManualMark {
+  id        String   @id @default(uuid())
+  sessionId String
+  studentId String
+  markedBy  String
+  reason    String
+  createdAt DateTime @default(now())
+
+  @@unique([sessionId, studentId])
+}
+
+model Excuse {
+  id         String   @id @default(uuid())
+  studentId  String
+  sectionIds String[] @default([]) // empty = all classes
+  fromDate  String
+  toDate    String
+  reason    String
+  createdBy String
+  createdAt DateTime @default(now())
+
+  @@index([studentId])
+}
+
+model Dispute {
+  id         String        @id @default(uuid())
+  sessionId  String
+  studentId  String
+  message    String
+  status     RequestStatus @default(PENDING)
+  resolvedBy String?
+  resolution String?
+  createdAt  DateTime      @default(now())
+
+  @@unique([sessionId, studentId])
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  kind      String
+  title     String
+  body      String
+  data      Json      @default("{}")
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
+  pushedAt  DateTime?
+
+  @@index([userId, createdAt])
+}
+
+model AuditLog {
+  id      String   @id @default(uuid())
+  actorId String?
+  action  String
+  target  String
+  payload Json     @default("{}")
+  at      DateTime @default(now())
+}
+
+model Setting {
+  key   String @id
+  value Json
+}
+
+enum JoinKind {
+  STUDENT
+  TEACHER
+}
+
+/// Codes people use to create their own account: one per class (students) and a teacher code.
+model JoinCode {
+  code      String   @id
+  kind      JoinKind // STUDENT: join the class · TEACHER: co-teach the class
+  classId   String?
+  sectionId String?
+  active    Boolean  @default(true)
+  uses      Int      @default(0)
+  createdBy String
+  createdAt DateTime @default(now())
+}
+
+/// A student's or teacher's own calendar entry (study plan, reminder). Only they see it.
+model PersonalEvent {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  date      String // YYYY-MM-DD
+  startMin  Int? // minutes from midnight; null = all day
+  endMin    Int?
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, date])
+}

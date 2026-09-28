@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exist Attendance</title>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+<style>
+  :root { --bg:#f6f7f6; --card:#fff; --ink:#1d2320; --muted:#5f6b66; --line:#dfe4e1; --accent:#2e6b5e; --accent-ink:#fff; --bad:#b3261e; --warn:#a15c00; --ok:#1e7a3c; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#111513; --card:#1a201d; --ink:#e6ebe8; --muted:#9aa6a0; --line:#2c3531; --accent:#7fc4b0; --accent-ink:#0d1a16; --bad:#f2b8b5; --warn:#ffb951; --ok:#8fd6a4; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--ink); }
+  header { display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--card); position:sticky; top:0; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; flex:1; }
+  main { max-width:1100px; margin:0 auto; padding:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+  h2 { font-size:16px; margin:0 0 12px; }
+  button, .btn { font:inherit; border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:8px; padding:6px 12px; cursor:pointer; text-decoration:none; display:inline-block; }
+  button.primary, .btn.primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+  input { font:inherit; width:100%; padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--ink); }
+  table { border-collapse:collapse; font-size:14px; }
+  td, th { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  .muted { color:var(--muted); font-size:13px; }
+  .scroll { overflow-x:auto; }
+  .PRESENT, .MANUAL { color:var(--ok); font-weight:600; } .LATE, .LEFT_EARLY, .FLAGGED { color:var(--warn); font-weight:600; } .ABSENT { color:var(--bad); font-weight:600; } .EXCUSED { color:var(--muted); }
+  #qr svg { width:min(80vw, 520px); height:auto; background:#fff; padding:12px; border-radius:12px; }
+  .err { color:var(--bad); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:12px; }
+  .big { font-size:40px; font-weight:700; }
+</style>
+</head>
+<body>
+<header><h1 id="title">Exist</h1><span id="who" class="muted"></span><span id="nav"></span></header>
+<main id="app"></main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const hm = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const day = (ms) => new Date(ms).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+const LETTER = { PRESENT: 'P', MANUAL: 'P', LATE: 'L', LEFT_EARLY: 'E', FLAGGED: 'F', ABSENT: 'A', EXCUSED: 'X', UNVERIFIED: 'U' };
+let token = null, me = null, timers = [], institution = null;
+try { token = localStorage.getItem('exist.token'); } catch {}
+
+async function api(method, path, body) {
+  const r = await fetch(path, { method, headers: { ...(token ? { authorization: 'Bearer ' + token } : {}), ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  const ct = r.headers.get('content-type') || '';
+  const data = ct.includes('json') ? await r.json() : await r.text();
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+function view(html) { timers.forEach(clearInterval); timers = []; $('#app').innerHTML = html; }
+function msg(sel, text, isErr) { const el = $(sel); if (el) { el.textContent = text; el.className = isErr ? 'err' : 'muted'; } }
+
+function loginView() {
+  $('#nav').innerHTML = ''; $('#who').textContent = '';
+  view(`<div class="card" style="max-width:420px;margin:40px auto">
+    <h2>${esc(institution ?? 'Exist attendance')}</h2>
+    <p>Attendance is taken with the <b>Exist app</b>. Students and teachers create their account in the app.</p>
+    <p><a class="btn primary" href="/app.apk">Download the Android app</a></p>
+    <hr style="border:none;border-top:1px solid var(--line);margin:20px 0">
+    <p class="muted">Already have an account? Sign in to see attendance sheets.</p>
+    <p><input id="email" type="email" placeholder="Email" autocomplete="username"></p>
+    <p><input id="pw" type="password" placeholder="Password" autocomplete="current-password"></p>
+    <button class="primary" id="go">Sign in</button> <span id="m"></span></div>`);
+  $('#go').onclick = async () => {
+    try {
+      const r = await api('POST', '/auth/login', { email: $('#email').value, password: $('#pw').value });
+      token = r.token; try { localStorage.setItem('exist.token', token); } catch {}
+      boot();
+    } catch (e) { msg('#m', e.message, true); }
+  };
+}
+
+async function boot() {
+  try { institution = (await api('GET', '/setup/status')).institution; } catch {}
+  $('#title').textContent = institution ?? 'Exist';
+  if (!token) return loginView();
+  try { me = await api('GET', '/me'); } catch { token = null; return loginView(); }
+  $('#who').textContent = `${me.name} · ${me.role.toLowerCase()}`;
+  $('#nav').innerHTML = '<button id="out">Sign out</button>';
+  $('#out').onclick = () => { token = null; try { localStorage.removeItem('exist.token'); } catch {} loginView(); };
+  if (me.role === 'TEACHER') return teacherHome();
+  if (me.role === 'STUDENT') return studentHome();
+  view('<div class="card">This account type is no longer used.</div>');
+}
+
+// ---------------------------------------------------------------- teachers
+async function teacherHome() {
+  const [classes, sched] = await Promise.all([api('GET', '/classes'), api('GET', '/me/schedule?days=1')]);
+  const now = sched.serverNow;
+  const today = sched.sessions.filter((s) => s.scheduledEnd > now - 3 * 3600e3 && s.scheduledStart < now + 12 * 3600e3);
+  view(`<div class="card"><h2>My classes</h2>${classes.length ? `<div class="grid">${classes.map((c) => `<div class="card" style="margin:0">
+      <b>${esc(c.label)}</b><div class="muted">${c.students} students${c.codes?.student ? ` · class code <b>${esc(c.codes.student)}</b>` : ''}${c.archived ? ' · archived' : ''}</div>
+      <p><button data-sheet="${esc(c.id)}" class="primary">Attendance sheet</button></p></div>`).join('')}</div>`
+    : '<p class="muted">No classes yet. Create one in the app (My classes → New class).</p>'}</div>
+    <div class="card"><h2>Today</h2><p class="muted">Your phone takes attendance. Only if it is not available, run the class from here: students scan the code on screen.</p>
+    ${today.length ? `<table>${today.map((s) => `<tr><td>${hm(s.scheduledStart)}–${hm(s.scheduledEnd)}</td><td>${esc(s.label)}</td><td class="muted">${esc(s.state)}</td>
+      <td>${s.canStart ? `<button data-web="${esc(s.key)}">Run without phone</button>` : s.state === 'ACTIVE' ? `<button data-open="${esc(s.key)}">Show code</button>` : ''}</td></tr>`).join('')}</table>` : '<p class="muted">No classes today.</p>'}</div>`);
+  document.querySelectorAll('[data-sheet]').forEach((b) => (b.onclick = () => sheetView(b.dataset.sheet)));
+  document.querySelectorAll('[data-web]').forEach((b) => (b.onclick = async () => {
+    try { await api('POST', '/sessions/start-web', { key: b.dataset.web }); runQr(b.dataset.web); } catch (e) { alert(e.message); }
+  }));
+  document.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => runQr(b.dataset.open)));
+}
+
+async function sheetView(id) {
+  const r = await api('GET', `/classes/${encodeURIComponent(id)}/register`);
+  view(`<div class="card"><p><button id="back">← My classes</button> <button id="csv">Download CSV</button></p>
+    <h2>${esc(r.class.label)} · attendance sheet</h2>
+    <p class="muted">P present · L late · E left early · F needs review · A absent · X excused. Change entries in the app (class → Attendance sheet).</p>
+    <div class="scroll"><table><tr><th>Roll</th><th>Name</th><th>%</th>${r.sessions.map((s) => `<th>${day(s.start)}</th>`).join('')}</tr>
+    ${r.students.map((s) => `<tr><td>${esc(s.rollNo)}</td><td>${esc(s.name)}</td><td><b>${s.percent}</b></td>${s.statuses.map((x) => `<td class="${x ?? ''}">${x ? LETTER[x] : '·'}</td>`).join('')}</tr>`).join('')}
+    </table></div></div>`);
+  $('#back').onclick = teacherHome;
+  $('#csv').onclick = async () => {
+    const text = await api('GET', `/classes/${encodeURIComponent(id)}/register?format=csv`);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' })); a.download = `${id}.csv`; a.click();
+  };
+}
+
+function runQr(key) {
+  view(`<div class="card" style="text-align:center"><h2>Scan with the Exist app</h2><div id="qr"></div>
+    <p class="muted">The code changes every 5 seconds. Keep this on the projector.</p><button id="end">End class</button> <button id="back">Back</button></div>
+    <div class="card"><h2>Checked in</h2><div id="roster" class="scroll"></div></div>`);
+  const draw = async () => {
+    try {
+      const c = await api('GET', `/sessions/${encodeURIComponent(key)}/challenge`);
+      const q = qrcode(0, 'M'); q.addData(JSON.stringify({ v: 1, k: c.sessionKey, c: c.challengeB64 })); q.make();
+      $('#qr').innerHTML = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
+    } catch (e) { $('#qr').textContent = e.message; }
+  };
+  const roster = async () => {
+    try {
+      const d = await api('GET', `/sessions/${encodeURIComponent(key)}`);
+      $('#roster').innerHTML = `<table>${d.students.map((s) => `<tr><td>${esc(s.rollNo)}</td><td>${esc(s.name)}</td><td>${s.checks.filter((c) => c.passed).map((c) => c.kind).join(', ') || '—'}</td></tr>`).join('')}</table>`;
+    } catch {}
+  };
+  draw(); roster();
+  timers.push(setInterval(draw, 2500), setInterval(roster, 8000));
+  $('#end').onclick = async () => { if (!confirm('End class?')) return; await api('POST', `/sessions/${encodeURIComponent(key)}/end`); teacherHome(); };
+  $('#back').onclick = teacherHome;
+}
+
+// ---------------------------------------------------------------- students
+async function studentHome() {
+  const a = await api('GET', '/me/attendance');
+  const cls = a.sections.filter((s) => s.current !== false);
+  view(`<div class="card" style="text-align:center"><div class="muted">All my classes</div><div class="big">${a.overall.percent}%</div>
+      <div class="muted">${a.overall.attended} of ${a.overall.total} classes · required ${Math.round(a.threshold)}%</div></div>
+    <div class="grid">${cls.map((s) => `<div class="card" style="margin:0"><b>${esc(s.label)}</b>
+      <div class="big" style="font-size:28px;color:${s.percent < a.threshold ? 'var(--bad)' : 'var(--ok)'}">${s.percent}%</div>
+      <div class="muted">${s.total} classes counted</div><p><button data-sheet="${esc(s.sectionId)}" data-label="${esc(s.label)}">My sheet</button></p></div>`).join('')
+    || '<div class="card">No classes yet. Join a class in the app with the code from your teacher.</div>'}</div>`);
+  document.querySelectorAll('[data-sheet]').forEach((b) => (b.onclick = () => mySheet(b.dataset.sheet, b.dataset.label)));
+}
+
+async function mySheet(id, label) {
+  const r = await api('GET', `/me/classes/${encodeURIComponent(id)}/sheet`);
+  view(`<div class="card"><p><button id="back">← All classes</button></p><h2>${esc(label)} · ${r.percent ?? '—'}%</h2>
+    <table>${r.records.map((x) => `<tr><td>${day(x.start)} ${hm(x.start)}</td><td class="${x.status}">${esc(x.status.replace('_', ' ').toLowerCase())}</td><td class="muted">${esc(x.reasons.join(', '))}${x.overridden ? ' · set by teacher' : ''}</td></tr>`).join('') || '<tr><td>No classes held yet</td></tr>'}</table>
+    <p class="muted">Wrong entry? Tell your teacher from the app (tap the entry) within 3 days.</p></div>`);
+  $('#back').onclick = studentHome;
+}
+
+boot();
+</script>
+</body>
+</html>

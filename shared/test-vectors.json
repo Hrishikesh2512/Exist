@@ -1,0 +1,178 @@
+{
+  "secretHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "sessionKey": "tt:2026-09-28:570:CS-A+CS-B",
+  "shortId": 2270776023,
+  "slot": 356000000,
+  "token": 1019480589,
+  "sectionId": "CS301-CSE-A",
+  "sectionIdentity": {
+    "sectionShortId": 2003739918,
+    "service": [
+      "4a573035-f88e-89f8-98a2-e2eeb6e3b608",
+      "9bbb36b6-a2f7-bffa-efc4-89f3876b5dd9"
+    ],
+    "region": [
+      "34392357-88bb-6c7c-ad70-84f995282b9e",
+      "18f034ed-2c7a-bdcb-8be3-28e8661d3047"
+    ]
+  },
+  "challengeHex": "0187594ad700000000153821003cc40a0d0201",
+  "checkInBodyHex": "0187594ad700000000153821003cc40a0d1111111122224333844455555555555501020304050607080000019e70448800",
+  "checkInHex": "0187594ad700000000153821003cc40a0d1111111122224333844455555555555501020304050607080000019e70448800483046022100e6657f7c7d77fe184a73a553f576aad236b5c0a9874149db48542ea454e865340221008e58f5165651b445d7028afbfd03a2b225666681f294c5f615316e3e1910e393",
+  "publicKeySpkiB64": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEDHBedJdn1tH66KD8o+KP9ShTwtYjchh2BM0LDhej6BOdhjMU1xC3s+fuq+Osvs9ePOjPQww5Xw/Fs80PFBiy8A==",
+  "plans": [
+    {
+      "times": {
+        "scheduledStart": 1790568000000,
+        "scheduledEnd": 1790571600000,
+        "actualStart": 1790568180000,
+        "actualEnd": null,
+        "plannedEnd": 1790571600000
+      },
+      "plan": {},
+      "extra": [],
+      "windows": [
+        {
+          "kind": "START",
+          "index": 0,
+          "from": 1790568180000,
+          "to": 1790568780000
+        },
+        {
+          "kind": "MID",
+          "index": 0,
+          "from": 1790569250245,
+          "to": 1790569370245
+        },
+        {
+          "kind": "END",
+          "index": 0,
+          "from": 1790571000000,
+          "to": 1790571600000
+        }
+      ]
+    },
+    {
+      "times": {
+        "scheduledStart": 1790568000000,
+        "scheduledEnd": 1790578800000,
+        "actualStart": 1790568180000,
+        "actualEnd": null,
+        "plannedEnd": 1790578800000
+      },
+      "plan": {},
+      "extra": [],
+      "windows": [
+        {
+          "kind": "START",
+          "index": 0,
+          "from": 1790568180000,
+          "to": 1790568780000
+        },
+        {
+          "kind": "MID",
+          "index": 0,
+          "from": 1790569575602,
+          "to": 1790569695602
+        },
+        {
+          "kind": "MID",
+          "index": 1,
+          "from": 1790573350902,
+          "to": 1790573470902
+        },
+        {
+          "kind": "MID",
+          "index": 2,
+          "from": 1790575630005,
+          "to": 1790575750005
+        },
+        {
+          "kind": "END",
+          "index": 0,
+          "from": 1790578200000,
+          "to": 1790578800000
+        }
+      ]
+    },
+    {
+      "times": {
+        "scheduledStart": 1790568000000,
+        "scheduledEnd": 1790578800000,
+        "actualStart": 1790568180000,
+        "actualEnd": null,
+        "plannedEnd": 1790578800000
+      },
+      "plan": {
+        "midChecks": 2,
+        "startWindowMin": 15,
+        "endWindowMin": 5
+      },
+      "extra": [
+        [
+          1790574000000,
+          1790574120000
+        ]
+      ],
+      "windows": [
+        {
+          "kind": "START",
+          "index": 0,
+          "from": 1790568180000,
+          "to": 1790569080000
+        },
+        {
+          "kind": "MID",
+          "index": 0,
+          "from": 1790569863128,
+          "to": 1790569983128
+        },
+        {
+          "kind": "MID",
+          "index": 100,
+          "from": 1790574000000,
+          "to": 1790574120000
+        },
+        {
+          "kind": "MID",
+          "index": 1,
+          "from": 1790575759059,
+          "to": 1790575879059
+        },
+        {
+          "kind": "END",
+          "index": 0,
+          "from": 1790578500000,
+          "to": 1790578800000
+        }
+      ]
+    },
+    {
+      "times": {
+        "scheduledStart": 1790568000000,
+        "scheduledEnd": 1790571600000,
+        "actualStart": 1790568180000,
+        "actualEnd": null,
+        "plannedEnd": 1790571600000
+      },
+      "plan": {
+        "midChecks": 0
+      },
+      "extra": [],
+      "windows": [
+        {
+          "kind": "START",
+          "index": 0,
+          "from": 1790568180000,
+          "to": 1790568780000
+        },
+        {
+          "kind": "END",
+          "index": 0,
+          "from": 1790571000000,
+          "to": 1790571600000
+        }
+      ]
+    }
+  ]
+}

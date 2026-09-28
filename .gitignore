@@ -1,0 +1,9 @@
+.pub-cache/
+.gradle/
+.home/
+app/build/
+app/.dart_tool/
+.env
+exist.apk
+exist-server.tgz
+app/android/build/
