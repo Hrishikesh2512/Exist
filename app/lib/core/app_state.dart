@@ -10,11 +10,14 @@ import 'api.dart';
 import 'models.dart';
 import '../protocol/protocol.dart';
 import 'native.dart';
+import 'offline.dart';
 import 'store.dart';
 
 class AppState extends ChangeNotifier {
   final Api api = Api();
   final Store store;
+  /// Data saved on the phone + changes waiting for internet.
+  late final Offline local = Offline(api, store);
   AppState(this.store) {
     api.token = store.read<String>('auth.token');
     me = store.read<Map<String, dynamic>>('auth.me');
@@ -135,6 +138,8 @@ class AppState extends ChangeNotifier {
       offline = false;
       lastError = null;
       await _configureNative();
+      // Send changes made offline, then save everything this person may look at without internet.
+      unawaited(local.flush().then((_) => prefetchForOffline()));
     } on ApiException catch (e) {
       offline = e.isOffline;
       lastError = e.message;
@@ -170,6 +175,44 @@ class AppState extends ChangeNotifier {
         for (final s in sessions)
           if (s.state == 'UPCOMING' && s.scheduledStart > now())
             {'key': s.key, 'at': s.scheduledStart - minuteMs, 'title': 'Class starting: ${s.label}'},
+      ]);
+    }
+  }
+
+  static String _day(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  /// Calendar request paths, identical to the ones the screens use (so the saved copies match).
+  static String monthPath(DateTime month) =>
+      '/me/calendar?from=${_day(DateTime(month.year, month.month))}&to=${_day(DateTime(month.year, month.month + 1, 0))}';
+  static String classDaysPath(DateTime today) =>
+      '/me/calendar?from=${_day(today)}&to=${_day(today.add(const Duration(days: 60)))}';
+
+  /// Save what a teacher or student may need offline: classes, sheets, calendar, alerts.
+  Future<void> prefetchForOffline() async {
+    if (!signedIn) return;
+    final now = DateTime.now();
+    final common = [monthPath(now), monthPath(DateTime(now.year, now.month + 1)), '/me/notifications'];
+    if (isTeacher) {
+      try {
+        final classes = (await local.get('/classes')).data as List;
+        await local.prefetch([
+          ...common,
+          '/teacher/device-requests',
+          '/disputes',
+          classDaysPath(now),
+          for (final c in classes) ...[
+            '/classes/${Uri.encodeComponent(c['id'])}',
+            '/classes/${Uri.encodeComponent(c['id'])}/register',
+            '/sections/${Uri.encodeComponent(c['id'])}/students',
+          ],
+        ]);
+      } catch (_) {}
+    } else if (role == 'STUDENT') {
+      await local.prefetch([
+        ...common,
+        '/me/attendance',
+        '/classes',
+        for (final s in subjects) '/me/classes/${Uri.encodeComponent(s.id)}/sheet',
       ]);
     }
   }

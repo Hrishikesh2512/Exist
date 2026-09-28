@@ -26,6 +26,10 @@ Future<void> main() async {
   });
   // Free alternative to push notifications: show new alerts whenever the app is awake.
   Timer.periodic(const Duration(minutes: 5), (_) => state.pollNotifications());
+  // Changes made without internet go out as soon as there is a connection.
+  Timer.periodic(const Duration(seconds: 30), (_) {
+    if (state.signedIn) state.local.flush();
+  });
   runApp(
     AppScope(
       state: state,

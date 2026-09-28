@@ -58,6 +58,7 @@ function loginView() {
     <h2>${esc(institution ?? 'Exist attendance')}</h2>
     <p>Attendance is taken with the <b>Exist app</b>. Students and teachers create their account in the app.</p>
     <p><a class="btn primary" href="/app.apk">Download the Android app</a></p>
+    <p class="muted">If it says it can't be installed (older phone), use <a href="/app-32.apk">this version</a> instead.</p>
     <hr style="border:none;border-top:1px solid var(--line);margin:20px 0">
     <p class="muted">Already have an account? Sign in to see attendance sheets.</p>
     <p><input id="email" type="email" placeholder="Email" autocomplete="username"></p>

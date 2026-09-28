@@ -11,13 +11,15 @@ const apkPath = process.env.APK_PATH ?? '/downloads/exist.apk';
 export async function dashboardRoutes(app: FastifyInstance) {
   app.get('/', async (_req, rep) => rep.type('text/html').send(html));
 
-  /** Android app download (phones open http://<server>/app.apk). */
-  app.get('/app.apk', async (_req, rep) => {
-    if (!existsSync(apkPath)) return rep.status(404).send({ error: 'app not published on this server' });
-    return rep
-      .header('content-type', 'application/vnd.android.package-archive')
-      .header('content-disposition', 'attachment; filename="exist.apk"')
-      .header('content-length', statSync(apkPath).size)
-      .send(createReadStream(apkPath));
-  });
+  /** Android app downloads: /app.apk (most phones) and /app-32.apk (older 32-bit phones). */
+  for (const [url, file] of [['/app.apk', apkPath], ['/app-32.apk', apkPath.replace(/\.apk$/, '-32.apk')]] as const) {
+    app.get(url, async (_req, rep) => {
+      if (!existsSync(file)) return rep.status(404).send({ error: 'app not published on this server' });
+      return rep
+        .header('content-type', 'application/vnd.android.package-archive')
+        .header('content-disposition', `attachment; filename="${url.slice(1).replace('app', 'exist')}"`)
+        .header('content-length', statSync(file).size)
+        .send(createReadStream(file));
+    });
+  }
 }
