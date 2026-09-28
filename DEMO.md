@@ -17,8 +17,8 @@ Teacher code: in `.env` (`TEACHER_SIGNUP_CODE`). Database: `exist_demo` (clean; 
 
 > 📲 **Attendance demo this week: please set up before class**
 >
-> 1. Install the Exist app: https://fedora-laptop.tail37ac76.ts.net/app.apk
->    (if Android says it can't install, use https://fedora-laptop.tail37ac76.ts.net/app-32.apk)
+> 1. Install the Exist app: https://github.com/Hrishikesh2512/Exist/releases/download/demo-1/Exist.apk
+>    (if Android says it can't install, use https://github.com/Hrishikesh2512/Exist/releases/download/demo-1/Exist-older-phones.apk)
 >    Android will ask to allow installing from your browser: allow it once.
 > 2. Open it → **Create an account** → *I'm a student* → your name, college email, roll number, a password,
 >    and class code **XXXXXXXX**.
