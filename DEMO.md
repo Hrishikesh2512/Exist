@@ -57,4 +57,7 @@ Teacher code: in `.env` (`TEACHER_SIGNUP_CODE`). Database: `exist_demo` (clean; 
 | A student's phone doesn't check in | Bluetooth on? Check-ins can also be done with **Check in now** or the classroom QR (website → Run without phone) |
 | Backups | Daily at 21:00 in `~/.local/share/exist/backups` |
 
-After the demo: `! sudo tailscale funnel --https=443 off` to stop the public address.
+After the demo:
+- Stop the public address: `tailscale funnel --https=443 off`
+- Let the laptop sleep again when the lid closes: `sudo rm /etc/systemd/logind.conf.d/exist-keep-awake.conf && sudo systemctl kill -s HUP systemd-logind`
+- Let it sleep when idle again: `gsettings reset org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type`
